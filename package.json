@@ -1,0 +1,76 @@
+{
+  "name": "poc-md-cms",
+  "version": "1.0.0",
+  "description": "Build a proof of concept for a **GitHub-backed collaborative Markdown CMS** intended for development documentation.",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "npm run build:client && wrangler dev --env \"\" --ip 0.0.0.0",
+    "build:client": "vite build",
+    "build": "npm run build:client && wrangler deploy --dry-run --env production",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
+    "test": "vitest run",
+    "test:e2e": "npm run build:client && playwright test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "deploy": "npm run build:client && wrangler deploy --env production",
+    "verify": "npm run check && npm run test:e2e && npm run format:check",
+    "setup:browser": "playwright install --with-deps chromium"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nu-shinkan-project/poc-md-cms.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/nu-shinkan-project/poc-md-cms/issues"
+  },
+  "homepage": "https://github.com/nu-shinkan-project/poc-md-cms#readme",
+  "dependencies": {
+    "@octokit/auth-app": "^8.3.1",
+    "@tiptap/core": "^3.31.3",
+    "@tiptap/extension-collaboration": "^3.31.3",
+    "@tiptap/markdown": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
+    "@tiptap/y-tiptap": "^3.0.9",
+    "dompurify": "^3.4.15",
+    "jose": "^6.2.12",
+    "marked": "^18.0.13",
+    "partyserver": "^0.5.10",
+    "y-partyserver": "^2.2.0",
+    "yjs": "^13.6.32"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260914.1",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^24.13.4",
+    "eslint": "^10.10.0",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.0",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0",
+    "wrangler": "^4.131.2"
+  },
+  "overrides": {
+    "y-partyserver": {
+      "@cloudflare/workers-types": "$@cloudflare/workers-types"
+    }
+  },
+  "private": true,
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260911.1": true
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "poc-md-cms",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-14",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "Draft", "class_name": "Draft" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Draft"] }],
+  "vars": {
+    "REPOSITORY_MODE": "fixture",
+    "GITHUB_OWNER": "demo",
+    "GITHUB_REPO": "docs",
+    "GITHUB_BRANCH": "main",
+  },
+  "env": {
+    "production": {
+      "name": "poc-md-cms-production",
+      "durable_objects": {
+        "bindings": [{ "name": "Draft", "class_name": "Draft" }],
+      },
+      "vars": {
+        "REPOSITORY_MODE": "github",
+        "GITHUB_OWNER": "REPLACE_ME",
+        "GITHUB_REPO": "REPLACE_ME",
+        "GITHUB_BRANCH": "main",
+        "ACCESS_TEAM_DOMAIN": "REPLACE_ME.cloudflareaccess.com",
+        "ACCESS_AUD": "REPLACE_ME",
+      },
+    },
+  },
+}

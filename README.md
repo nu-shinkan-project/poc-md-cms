@@ -1,317 +1,111 @@
-# GitHub-Backed Collaborative Markdown CMS PoC
+# GitHub-backed Collaborative Markdown CMS PoC
 
-## Goal
+GitHubのMarkdownを閲覧し、Tiptapで共同編集して、編集開始時のコミットを起点とするブランチ／PRを作成するPoCです。Cloudflare Workers + Durable Objects上で動作します。
 
-Build a proof of concept for a **GitHub-backed collaborative Markdown CMS** intended for development documentation.
+**ローカル実装・検証済み。残る作業は実アカウントの設定と外部E2E検証です。** ローカルでは固定のサンプルリポジトリを使い、GitHubへの書き込みを模擬します。GitHub Appの実アダプターは実装済みです。
 
-The PoC should demonstrate that:
+## 起動
 
-* Markdown files in a GitHub repository can serve as the published source of truth.
-* Users can browse the repository as a directory-aware documentation site.
-* Users can edit a document through a web-based rich-text editor.
-* Multiple users can edit the same document concurrently in real time.
-* In-progress collaborative state can survive reloads and temporary disconnects.
-* The edited document can be converted back to Markdown.
-* A completed editing session can be prepared for publication back to GitHub through a branch / pull-request workflow.
+Node.js 24以上とnpmを使用します。プロジェクト固有のCLIはすべてローカル依存です。
 
-The task includes **technology selection, project bootstrap, dependency selection, configuration, implementation, testing, and documentation**.
-
-The repository may initially contain nothing other than this README. Do not expect the user to prepare the application structure or development toolchain.
-
-## Completion Boundary
-
-Complete everything that can reasonably be implemented and verified **without requiring the user to authenticate with Cloudflare or connect/install a GitHub App**.
-
-The PoC is complete when the implementation is ready for the final external integration check and the only remaining manual prerequisites are actions such as:
-
-* authenticating the deployment tooling with the user's Cloudflare account;
-* creating, installing, authorizing, or supplying credentials for the GitHub App;
-* supplying identifiers or secrets that can only be obtained after those actions;
-* performing the final end-to-end verification against the real Cloudflare account and GitHub repository.
-
-Do not stop merely because Cloudflare or GitHub integration eventually requires credentials. Implement and verify everything before that boundary using local development facilities, fixtures, test doubles, or mocks as appropriate.
-
-At completion, clearly document the minimal manual steps required to cross that boundary and perform the final verification.
-
-## Scope
-
-The PoC should implement the smallest system necessary to validate the architecture.
-
-A successful result should provide:
-
-### Repository-backed documentation UI
-
-Provide a directory-aware interface for browsing Markdown documents.
-
-The UI should make the relationship to the underlying repository obvious enough for development-document use, while not requiring ordinary users to interact with Git directly.
-
-Support at least:
-
-* directory and document navigation;
-* Markdown rendering;
-* basic front matter preservation;
-* opening a document for editing.
-
-A single configurable repository is sufficient.
-
-### Collaborative editing
-
-Provide real-time editing of a document by at least two browser sessions.
-
-Prefer mature, maintained collaboration primitives rather than implementing a custom synchronization or conflict-resolution algorithm.
-
-Investigate the current Cloudflare ecosystem and other appropriate maintained libraries before selecting the implementation. In particular, evaluate existing Yjs/CRDT integrations for Cloudflare Workers and Durable Objects rather than recreating them.
-
-The internal collaboration granularity does not need to match the UI granularity. It is acceptable, and likely preferable, to use character-level CRDT synchronization internally while presenting a simpler block-oriented editing experience.
-
-At minimum, verify:
-
-1. two browser sessions can open the same document;
-2. edits made in either session appear in the other without manual refresh;
-3. concurrent edits converge to the same document state;
-4. reloading a browser does not silently discard the current collaborative draft;
-5. the resulting state can be serialized to Markdown.
-
-Presence indicators, remote cursors, or active-user indicators are useful if naturally supported by the selected stack, but they are not required for PoC success.
-
-### Markdown editing
-
-Use an existing rich-text editor suitable for structured Markdown-oriented content.
-
-Do not build an editor from scratch.
-
-Markdown remains the interchange format with GitHub. The editor's internal document representation does not need to be Markdown while a document is being edited.
-
-Preserve ordinary development-document constructs reasonably well, including at least:
-
-* headings;
-* paragraphs;
-* lists;
-* links;
-* inline code;
-* fenced code blocks.
-
-Front matter may be edited separately from the rich-text body if that substantially simplifies the implementation.
-
-Do not spend disproportionate effort guaranteeing lossless round-tripping for every Markdown extension. Document unsupported or lossy constructs discovered during the PoC.
-
-If useful, provide a raw Markdown/source view as an escape hatch rather than implementing increasingly complex custom editor extensions.
-
-### Draft lifecycle
-
-Treat collaborative editing state and published Git state as different layers.
-
-A reasonable conceptual model is:
-
-```text
-GitHub repository
-    |
-    | open published document
-    v
-Collaborative draft session
-    |
-    | realtime editing
-    v
-Durable collaborative state
-    |
-    | publish
-    v
-Git branch / pull request
+```bash
+npm ci
+npm run dev
 ```
 
-GitHub should remain the intended source of truth for published documents.
+`http://localhost:8787` を開いてください。devcontainerでは8787番ポートを転送します。`npm run dev` はViteで静的ファイルを生成してからWranglerを起動し、実際のworkerdとSQLiteベースのDurable Objectをローカルで動かします。クライアントを変更したら `npm run build:client` またはdevコマンドを再実行してください。WorkerソースはWranglerが監視します。
 
-Collaborative storage exists to maintain an active or unfinished editing session. Avoid introducing another permanent CMS database as an independent canonical copy of published documents.
+ローカルのドラフトは `.wrangler/state/` に保存され、プロセスを終了しても残ります。このディレクトリを削除するとローカルドラフトが消えます。初期サンプルは `src/repository.ts` の `fixtures` にあります。
 
-The implementation should make this ownership boundary explicit.
+## 共同編集を試す
 
-### GitHub publishing workflow
+1. 通常ウィンドウとシークレットウィンドウなど、独立した2つのブラウザセッションを開きます。
+2. 両方で同じ文書を選び、**Edit collaboratively** を押します。
+3. 両方で入力し、相手側へ自動反映されることを確認します。
+4. 一方を一時的にオフラインにして両方で入力し、接続復帰後に両方の変更が残ることを確認します。
+5. 再読み込みして再び編集を開くと、公開済み本文ではなくドラフトが復元されます。
+6. **Markdown snapshot** で出力を確認し、必要ならダウンロードします。
+7. **Prepare pull request** を押します。ローカルでは `Simulated publication` とブランチ名が表示されます。**Published** の内容は変わりません。
 
-Implement the GitHub integration layer up to the point where real GitHub App credentials are required.
+未送信の編集はブラウザのメモリにあります。切断中はタブを開いたまま再接続してください。接続前の編集を含むHTTP公開要求や、別ユーザーの変更で内容がずれた公開要求は409で拒否されます。再同期後に内容を確認して再試行できます。
 
-Design for GitHub App authentication rather than a long-lived personal access token.
+## 検証コマンド
 
-The intended publishing flow is:
-
-```text
-published commit
-      |
-      v
-editing session
-      |
-      v
-CMS-created branch
-      |
-      v
-commit updated Markdown
-      |
-      v
-pull request
+```bash
+npm run setup:browser   # ChromiumとLinuxのOS依存をインストール（初回）
+npm run verify          # 型・lint・単体テスト・ビルド・ブラウザ・整形チェック
 ```
 
-Do not make direct writes to the default branch the primary publishing mechanism.
+| コマンド               | 内容                                                             |
+| ---------------------- | ---------------------------------------------------------------- |
+| `npm ci`               | lockfileによる再現可能な依存導入                                 |
+| `npm run typecheck`    | ブラウザとWorkerを別々の型環境で検査                             |
+| `npm run lint`         | ESLint / typescript-eslint                                       |
+| `npm test`             | Vitestの境界テスト                                               |
+| `npm run build`        | Vite + production Workerのデプロイdry-run。外部認証不要          |
+| `npm run test:e2e`     | クライアントをビルドし、8790番でWranglerを起動してPlaywright実行 |
+| `npm run format:check` | Prettierチェック                                                 |
+| `npm run dev`          | 8787番のローカルWorker／Durable Object                           |
+| `npm run deploy`       | production環境への実デプロイ。外部設定後に実行                   |
 
-Do not build a custom Git merge engine for the PoC.
+ブラウザテストは毎回専用の `.wrangler/browser-*` を作り、通常のローカルドラフトを変更しません。独立コンテキスト間の同期、切断中の同時編集、再読み込み、全クライアントを閉じた後のWorker再起動、Markdown出力、公開結果の永続化を検証します。`artifacts/collaboration.png` と `artifacts/worker-browser.log` を生成します。失敗時は `test-results/` にトレースが残ります。
 
-Record enough information when an editing session begins to identify the Git revision on which the draft was based. If the repository changes independently while the draft is open, the design should preserve that fact and allow Git / GitHub's branch and pull-request workflow to expose the resulting conflict.
+## 構成と所有権
 
-Where real GitHub access is unavailable, verify this behavior through an adapter boundary with tests or a realistic fake implementation.
-
-## Technology Selection
-
-Choose the development stack as part of this task.
-
-Prefer:
-
-* currently maintained technologies;
-* official or well-established Cloudflare integrations;
-* existing CRDT/collaboration libraries;
-* conventional TypeScript tooling;
-* the simplest architecture that demonstrates the PoC.
-
-Research current documentation before choosing versions or APIs.
-
-Cloudflare Workers and Durable Objects are the target deployment environment. Existing Cloudflare libraries for WebSocket applications and Yjs collaboration should be investigated as likely implementation candidates.
-
-A Tiptap/ProseMirror-family editor with Yjs integration is also a reasonable candidate, but it is not mandatory if another maintained solution produces a materially simpler PoC.
-
-Choose the package manager, build tooling, test framework, linting, formatting, and project structure yourself. Configure them in the repository so a new contributor does not need globally installed project-specific tooling beyond the ordinary runtime/bootstrap requirements you document.
-
-Commit lockfiles and other files required for reproducible setup.
-
-## Architecture Constraints
-
-Keep the architecture deliberately small.
-
-Prefer approximately one collaborative room/session per document.
-
-Separate persistent document content from ephemeral collaboration metadata such as connected users and cursor positions where practical.
-
-Avoid adding infrastructure that is not required to answer the PoC question.
-
-In particular, do not add D1, R2, queues, a search service, a custom authentication system, or another database merely because they may be useful in a future production CMS.
-
-They may be introduced only if the PoC genuinely cannot meet its acceptance criteria without them, and the reason must be documented.
-
-## Non-Goals
-
-This is not an attempt to build a production-ready Dhub, Notion, or Google Docs replacement.
-
-The following are explicitly out of scope unless they fall out almost for free from selected libraries:
-
-* production-quality visual design;
-* mobile optimization;
-* comments and discussion threads;
-* suggestion / track-changes mode;
-* document-level ACL management;
-* full-text search;
-* backlinks;
-* document graphs;
-* ADR-specific workflows;
-* advanced front matter editing;
-* arbitrary Git providers;
-* multi-repository management;
-* offline-first editing;
-* custom CRDT algorithms;
-* custom Git merge algorithms;
-* production observability;
-* billing;
-* general-purpose CMS extensibility.
-
-Do not create abstractions solely for hypothetical future implementations of these features.
-
-## Implementation Approach
-
-Work autonomously from the repository.
-
-Begin by inspecting the current ecosystem and selecting the shortest maintained path to the acceptance criteria.
-
-Bootstrap the project and implement incrementally.
-
-Prefer proving the riskiest architectural assumption early: persistent real-time collaborative Markdown editing on the target Cloudflare architecture.
-
-Once that works, connect it to the repository/document lifecycle.
-
-Where external credentials prevent a real integration test, isolate the external boundary and continue implementing and testing the rest of the system.
-
-Do not wait for user input merely to make ordinary technical choices that can be reasonably decided from the goal, current documentation, and PoC constraints.
-
-Ask for user action only when an external authorization, secret, account-specific identifier, potentially billable action, or other genuinely user-controlled resource is required.
-
-If multiple technically reasonable choices exist, choose the simpler one and record the decision briefly.
-
-## Verification
-
-Automate verification wherever practical.
-
-At minimum, provide commands that exercise:
-
-* dependency installation;
-* type checking;
-* automated tests;
-* production build;
-* local development;
-* local Cloudflare Worker / Durable Object execution where supported.
-
-Include automated tests around the boundaries where errors would undermine the PoC, especially:
-
-* Markdown conversion;
-* collaborative document persistence;
-* document/session identity;
-* GitHub adapter behavior;
-* base-revision tracking;
-* publication preparation.
-
-Also perform a browser-level manual verification of concurrent editing using multiple sessions before declaring the local PoC complete.
-
-If automated browser testing is straightforward with the selected stack, it may be added, but do not turn browser-test infrastructure into a project of its own.
-
-## Final Deliverables
-
-Leave the repository in a state where another developer can clone it and understand:
-
-* what architecture was selected and why;
-* how to install dependencies;
-* how to run the PoC locally;
-* how to verify collaborative editing;
-* how collaborative drafts are persisted;
-* how Markdown enters and leaves the editor;
-* how GitHub publication is modeled;
-* what was mocked because external authorization was unavailable;
-* what limitations were discovered;
-* exactly what remains to perform the final Cloudflare + GitHub integration.
-
-Update this README as implementation knowledge becomes concrete. Replace speculative setup instructions with the actual commands and configuration used by the PoC.
-
-## Final Handoff Point
-
-Stop only after the repository has been implemented and locally verified as far as possible without the user's external account authorization.
-
-The final report should make the remaining actions narrow and mechanical, ideally resembling:
-
-```text
-Remaining external verification
-
-1. Authenticate Wrangler with the target Cloudflare account.
-2. Create/install the GitHub App using the documented permissions and repository scope.
-3. Supply the documented environment variables/secrets.
-4. Deploy using the documented command.
-5. Open two browser sessions and verify real-time collaboration.
-6. Open a document from the configured GitHub repository.
-7. Edit collaboratively and publish it.
-8. Confirm that the expected branch, commit, and pull request are created.
+```mermaid
+flowchart LR
+  G[GitHubの公開コミット] -->|初回のみ取り込み| D[文書ごとのDurable Object]
+  A[Tiptap ブラウザA] <-->|Yjs WebSocket| D
+  B[Tiptap ブラウザB] <-->|Yjs WebSocket| D
+  D --> S[DO内のSQLiteドラフト]
+  D -->|Markdownへ変換| P[元コミットからブランチ・コミット・PR]
+  P -->|GitHubでレビュー・マージ| G
 ```
 
-The exact steps must reflect the actual implementation.
+- 公開済み文書の正本はGitHubです。閲覧は設定ブランチの最新コミットから読み込みます。
+- 部屋名はowner/repository/full-pathの可逆エンコードです。同じファイル名でもディレクトリが違えば別の部屋になります。
+- 初期化はサーバーだけが実行します。GitコミットSHAを確定してから同じSHAのファイルを読み込み、Tiptap JSONからYjsへ変換します。初回の同時接続で本文を二重挿入しません。
+- 元コミット・blob SHA・対象ブランチ・元ソースはクライアントが編集できるCRDTの外に保存します。本文はY.XmlFragment、front matterはY.Textです。
+- 各Yjs更新時にSQLiteの1行へ完全な状態を保存します。DOの出力ゲートが永続化を保護します。y-partyserverの保存フックも補助的に使います。presenceは永続化しません。
+- D1、R2、独立したCMS DB、独自CRDTは使いません。SQLiteはそのDurable Objectのドラフト保存機能です。
 
-If additional implementation work would still be required after those credentials are supplied, the PoC has not yet reached the intended handoff point.
+## Markdown対応
 
-## Guiding Principle
+見出し、段落、箇条書き、番号付きリスト、リンク、インラインコード、言語指定付きコードフェンスを往復テストしています。太字・斜体も対応します。YAML front matterは改行・コメントを含めてそのまま維持し、UIでは読み取り専用です。
 
-This is an exploratory proof of concept.
+TiptapのMarkdown機能はbetaです。空白、リストの表記、フェンスなどは正規化されます。テーブル、画像、タスクリスト、HTML、MDX、脚注、独自ディレクティブの可逆変換は保証しません。これらは表示できても編集時に失われる場合があります。生成されたMarkdownの確認／ダウンロードを用意していますが、raw Markdownを直接共同編集する機能はありません。相対Markdownリンクで文書間を移動できます。リポジトリ画像配信は対象外です。
 
-Optimize for answering:
+## GitHub公開
 
-> Can a GitHub-backed development-document CMS with practical real-time collaborative Markdown editing be built cleanly on Cloudflare without taking ownership of Git's role as the published source of truth?
+GitHub Appのinstallation tokenをサーバーだけで取得します。PATは使いません。
 
-Prefer a small working implementation that answers that question over a generalized architecture designed for hypothetical future requirements.
+1. ブラウザが期待する本文とサーバーの現在のMarkdownが一致することを確認します。
+2. path・元コミット・MarkdownのSHA-256から `cms/<hash>` を決定します。
+3. **元コミットのtree**を使ってその1ファイルの変更treeを作り、**元コミットだけを親**にするコミットを作ります。
+4. 新ブランチを作り、元の対象ブランチへPRを開きます。
+5. 結果をドラフトに記録します。同じ内容の再実行は同じ結果になります。RESTの途中失敗後も既存ブランチ／PRを検索して再開します。
+
+外部でブランチが進んでもbase SHAを差し替えません。競合判定・解決・マージはGitHubに任せます。default branchへの直接書き込みはありません。
+
+PoCではPR作成後もドラフトを保持し、変更したスナップショットは別PRになります。既存PRの更新、マージ通知、ドラフトの自動破棄／新baseへの切替は実装していません。設定ブランチを既存ドラフトの途中で切り替えないでください。長期運用のセッション管理は次段階です。
+
+## 実アカウントへの接続
+
+[外部連携手順](docs/external-integration.md)に、GitHub Appの権限、秘密鍵形式、Wrangler secrets、Cloudflare Access、デプロイ、最後の2ブラウザ検証をまとめています。
+
+productionはCloudflare Access JWTの検証を必須とし、未設定なら401で閉じます。独自ユーザーDB／ログイン機構はありません。許可された利用者は設定リポジトリの全Markdownを編集・PR化できます。ドキュメント単位のACLは対象外です。認証なしのfixture環境はローカルデモ専用です。
+
+## ファイル案内・判断記録
+
+| ファイル               | 役割                                              |
+| ---------------------- | ------------------------------------------------- |
+| `src/worker.ts`        | HTTP／WebSocketルーティング、ドラフト永続化、公開 |
+| `src/repository.ts`    | GitHub App RESTアダプターとfixture                |
+| `src/markdown.ts`      | MarkdownとYjs変換・front matter・部屋名           |
+| `src/access.ts`        | Cloudflare Access JWT検証                         |
+| `src/client.ts`        | ディレクトリ閲覧・Tiptap編集UI                    |
+| `docs/architecture.md` | 調査した候補・採用理由・制限                      |
+| `docs/handouts/`       | 作業経過・判断・再開用ハンドアウト                |
+| `docs/requirements.md` | 元の要件全文                                      |
+
+Node 24.21.0 / npm 11.19.0で検証しました。依存バージョンはlockfileに固定しています。y-partyserverのworkers-types peer宣言がv4のため、現在のWranglerに合わせてv5へoverrideしています。型検査・実workerdでの検証を通して使用しています。
